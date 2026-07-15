@@ -1,6 +1,6 @@
 {
   "name": "webshield-sdk",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Enterprise-Grade Plug-and-Play Security SDK & WAF for Node.js/Express. Protects against DDoS, XSS, NoSQLi, SQLi, CSRF, and data leaks.",
   "main": "src/index.js",
   "bin": {
@@ -27,7 +27,7 @@
     "shield",
     "honeypot"
   ],
-  "author": "Rakshak AI Team",
+  "author": "Dhananjay kumar verma",
   "license": "MIT",
   "type": "commonjs",
   "files": [

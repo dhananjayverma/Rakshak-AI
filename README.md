@@ -2,6 +2,10 @@
 
 > **Install → Add middleware → You're protected. No config. No API key. No bullshit.**
 
+[![npm version](https://img.shields.io/npm/v/webshield-sdk.svg?style=flat-square)](https://www.npmjs.com/package/webshield-sdk)
+[![npm downloads](https://img.shields.io/npm/dw/webshield-sdk.svg?style=flat-square)](https://www.npmjs.com/package/webshield-sdk)
+[![license](https://img.shields.io/npm/l/webshield-sdk.svg?style=flat-square)](https://www.npmjs.com/package/webshield-sdk)
+
 An enterprise-grade, plug-and-play Security SDK, Web Application Firewall (WAF), and Threat Intelligence middleware designed to secure Node.js (Express) backends against malicious requests, brute-force exploits, automated scrapers, and sensitive credential leakage.
 
 ```bash
