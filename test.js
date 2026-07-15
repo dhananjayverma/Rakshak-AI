@@ -32,6 +32,7 @@ function runThreatScoreTests() {
 
   // Test Case 1: Safe request should return 0 score
   const safeReq = {
+    path: '/',
     headers: { 'user-agent': 'Mozilla/5.0' },
     query: {},
     body: {},
@@ -44,6 +45,7 @@ function runThreatScoreTests() {
 
   // Test Case 2: XSS script tag injection check
   const xssReq = {
+    path: '/',
     headers: { 'user-agent': 'Mozilla/5.0' },
     query: { input: '<script>alert(1)</script>' },
     body: {},
@@ -55,6 +57,7 @@ function runThreatScoreTests() {
 
   // Test Case 3: SQL Injection union pattern check
   const sqliReq = {
+    path: '/',
     headers: { 'user-agent': 'Mozilla/5.0' },
     query: { query: 'UNION SELECT username, password FROM users' },
     body: {},
@@ -66,6 +69,7 @@ function runThreatScoreTests() {
 
   // Test Case 4: Google API Key leak check
   const leakReq = {
+    path: '/',
     headers: { 'user-agent': 'Mozilla/5.0' },
     query: { key: 'AIzaSyA12345678901234567890123456789012' },
     body: {},

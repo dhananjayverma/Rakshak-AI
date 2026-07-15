@@ -170,7 +170,7 @@ function calculateThreatScore(req, config) {
   }
 
   // 5. Business API Abuse protection (Endpoint-specific analysis)
-  const path = req.path || req.url;
+  const path = req.path || req.url || '';
   const sensitiveEndpoints = ['/login', '/otp', '/register', '/reset-password'];
   const matchedEndpoint = sensitiveEndpoints.find(end => path.endsWith(end));
   if (matchedEndpoint) {
