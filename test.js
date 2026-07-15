@@ -1,4 +1,5 @@
 const assert = require('assert');
+process.env.NODE_ENV = 'production'; // Enforce strict production rules for testing
 const { calculateThreatScore } = require('./src/core/threatScore');
 const { corsGuardMiddleware } = require('./src/middleware/corsGuard');
 
@@ -87,26 +88,33 @@ function runCorsTests() {
   console.log('🧪 Running Dynamic CORS Engine Tests...');
   const runCors = corsGuardMiddleware(testConfig);
 
+  // Mock response object satisfying `vary` library requirements (getHeader and setHeader functions)
+  const mockRes = {
+    getHeader: () => {},
+    setHeader: () => {},
+    end: () => {}
+  };
+
   // Test Case 1: Server-to-server request (no origin) should be allowed
-  runCors({ headers: {} }, { setHeader: () => {}, end: () => {} }, (err) => {
+  runCors({ headers: {} }, mockRes, (err) => {
     assert.strictEqual(err, undefined);
     console.log('✅ Passed: CORS Server-to-server allowed');
   });
 
   // Test Case 2: Whitelisted origin string match should be allowed
-  runCors({ headers: { origin: 'https://trusted.com' } }, { setHeader: () => {}, end: () => {} }, (err) => {
+  runCors({ headers: { origin: 'https://trusted.com' } }, mockRes, (err) => {
     assert.strictEqual(err, undefined);
     console.log('✅ Passed: CORS Whitelisted Origin allowed');
   });
 
   // Test Case 3: RegExp matching origin match should be allowed
-  runCors({ headers: { origin: 'https://my-subdomain.vercel.app' } }, { setHeader: () => {}, end: () => {} }, (err) => {
+  runCors({ headers: { origin: 'https://my-subdomain.vercel.app' } }, mockRes, (err) => {
     assert.strictEqual(err, undefined);
     console.log('✅ Passed: CORS Regex pattern matching allowed');
   });
 
   // Test Case 4: Unlisted origin should trigger CORS error block
-  runCors({ headers: { origin: 'https://malicious.com' } }, { setHeader: () => {}, end: () => {} }, (err) => {
+  runCors({ headers: { origin: 'https://malicious.com' } }, mockRes, (err) => {
     assert.ok(err instanceof Error);
     console.log('✅ Passed: CORS Unauthorized Origin blocked');
   });
@@ -119,6 +127,6 @@ try {
   console.log('\n🎉 ALL WEBSHIELD SDK TESTS PASSED SUCCESSFULLY!');
   process.exit(0);
 } catch (testError) {
-  console.error('\n❌ TEST FAILURE ENCOUNTERED:', testError.message);
+  console.error('\n❌ TEST FAILURE ENCOUNTERED:', testError.stack || testError.message);
   process.exit(1);
 }
