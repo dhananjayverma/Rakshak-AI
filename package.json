@@ -1,12 +1,36 @@
 {
   "name": "webshield-sdk",
-  "version": "1.0.0",
-  "description": "Plug-and-play security SDK + agent system",
+  "version": "1.0.1",
+  "description": "Enterprise-Grade Plug-and-Play Security SDK & WAF for Node.js/Express. Protects against DDoS, XSS, NoSQLi, SQLi, CSRF, and data leaks.",
   "main": "src/index.js",
   "scripts": {
     "test": "node test.js",
     "start": "node test_app.js"
   },
+  "keywords": [
+    "security",
+    "waf",
+    "ddos",
+    "rate-limit",
+    "cors",
+    "csrf",
+    "xss",
+    "nosqli",
+    "sql-injection",
+    "leak-detection",
+    "express",
+    "middleware",
+    "shield",
+    "honeypot"
+  ],
+  "author": "Rakshak AI Team",
+  "license": "MIT",
+  "type": "commonjs",
+  "files": [
+    "src",
+    "README.md",
+    "PRIVACY.md"
+  ],
   "dependencies": {
     "axios": "^1.7.2",
     "bcryptjs": "^2.4.3",
@@ -38,9 +62,5 @@
     "eslint": "^9.5.0",
     "nodemon": "^3.1.4",
     "prettier": "^3.3.2"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs"
+  }
 }
