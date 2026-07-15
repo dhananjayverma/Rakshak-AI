@@ -25,7 +25,7 @@ jobs:
           cache: 'npm'
 
       - name: Install Project Dependencies
-        run: npm ci
+        run: npm install
 
       - name: Run WebShield SDK Integration Tests
         run: npm test
