@@ -168,3 +168,8 @@ To run and verify:
 
 ## 🚀 CI/CD Pipeline
 An automated GitHub Actions CI/CD configuration is located in [.github/workflows/ci.yml](file:///Users/laptopbazaar/Desktop/Rakshak%20AI/.github/workflows/ci.yml). It automatically runs on pulls/pushes targeting `main` or `master` across multiple Node.js environments (v18, v20, v22).
+
+---
+
+## 🔐 Privacy & Telemetry
+Refer to the [PRIVACY.md](file:///Users/laptopbazaar/Desktop/Rakshak%20AI/PRIVACY.md) file for details on data collection, local processing filters, and telemetry configurations.
