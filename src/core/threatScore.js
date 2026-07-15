@@ -159,6 +159,12 @@ function calculateThreatScore(req, config) {
     reasons.push('Burst limit threshold exceeded');
   }
 
+  // 3.1. Bot detected via consciousness telemetry check
+  if (req.webShieldState && req.webShieldState.botDetected) {
+    score += 55;
+    reasons.push('Automation scripting patterns detected (consciousness click telemetry failed)');
+  }
+
   // 4. JWT Authorization Security Inspection
   const authHeader = req.headers['authorization'];
   if (authHeader) {
@@ -166,6 +172,39 @@ function calculateThreatScore(req, config) {
     if (jwtResult.score > 0) {
       score += jwtResult.score;
       reasons.push(jwtResult.reason);
+    }
+  }
+
+  // 4.1. Behavioral Header Anomaly Scan (Headless bot / Scraper detection)
+  const uaString = req.headers['user-agent'] || '';
+  if (uaString) {
+    const isChrome = uaString.toLowerCase().includes('chrome');
+    // If user-agent claims Chrome, it MUST have modern SEC headers. Otherwise, it is a headless script/bot.
+    if (isChrome && !req.headers['sec-ch-ua']) {
+      score += 25;
+      reasons.push('Anomalous Chrome Request: Missing browser verification header (sec-ch-ua)');
+    }
+    // Flag common raw scrapers and bot scripting user-agents
+    if (/axios|needle|node-fetch|python|curl|wget|postman|scrapy|puppeteer/i.test(uaString)) {
+      score += 35;
+      reasons.push(`Automated client / scraper agent fingerprint matched: ${uaString.split('/')[0]}`);
+    }
+    // Mismatched browser parameters (real human browsers always send accept-language headers)
+    if (!req.headers['accept-language'] && !/curl|wget|axios/i.test(uaString)) {
+      score += 20;
+      reasons.push('Fingerprint mismatch: Missing accept-language header');
+    }
+  }
+
+  // 4.2. Canvas + WebGL Hardware Device Fingerprint check
+  const clientDeviceId = req.headers['x-webshield-device-id'];
+  if (clientDeviceId) {
+    req.webShieldState.deviceId = clientDeviceId;
+    
+    // Flag suspicious/obfuscated fingerprint attempts (e.g. anti-fingerprinting browser configs blocking canvas)
+    if (clientDeviceId === 'canvas-blocked' || clientDeviceId === 'webgl-blocked') {
+      score += 15;
+      reasons.push('Anomalous Hardware Signature: Client side canvas/webgl fingerprinting obfuscation detected');
     }
   }
 

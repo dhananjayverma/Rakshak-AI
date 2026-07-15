@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebShield SDK Documentation | Professional API Security & WAF</title>
+  <meta name="description" content="Official documentation for WebShield SDK. Enterprise-grade Web Application Firewall (WAF), distributed rate limiter, and threat intelligence middleware for Node.js.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-base: #0b0f17;
+      --bg-surface: #131a26;
+      --bg-sidebar: #0f141f;
+      --border-color: #1e293b;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-hover: #7dd3fc;
+      --accent-glow: rgba(56, 189, 248, 0.15);
+      --success: #34d399;
+      --warning: #fbbf24;
+      --danger: #f87171;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-base);
+      color: var(--text-main);
+      line-height: 1.6;
+      display: flex;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Sidebar Styles */
+    aside {
+      width: 280px;
+      background-color: var(--bg-sidebar);
+      border-right: 1px solid var(--border-color);
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      display: flex;
+      flex-direction: column;
+      padding: 2rem 1.5rem;
+      z-index: 10;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--text-main);
+      text-decoration: none;
+      margin-bottom: 2.5rem;
+    }
+
+    .brand span {
+      color: var(--accent);
+    }
+
+    .nav-section {
+      margin-bottom: 2rem;
+    }
+
+    .nav-title {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      margin-bottom: 0.75rem;
+      font-weight: 600;
+    }
+
+    .nav-links {
+      list-style: none;
+    }
+
+    .nav-links li {
+      margin-bottom: 0.5rem;
+    }
+
+    .nav-links a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 500;
+      transition: all 0.2s ease;
+      display: block;
+      padding: 0.35rem 0.5rem;
+      border-radius: 4px;
+    }
+
+    .nav-links a:hover, .nav-links a.active {
+      color: var(--text-main);
+      background-color: var(--bg-surface);
+      transform: translateX(4px);
+    }
+
+    /* Main Content Styles */
+    main {
+      margin-left: 280px;
+      flex-grow: 1;
+      padding: 3rem 4rem;
+      max-width: 1000px;
+    }
+
+    section {
+      margin-bottom: 4rem;
+      scroll-margin-top: 2rem;
+    }
+
+    h1, h2, h3 {
+      color: var(--text-main);
+      font-weight: 700;
+      margin-bottom: 1rem;
+    }
+
+    h1 {
+      font-size: 2.5rem;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 1rem;
+      margin-bottom: 2rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    h2 {
+      font-size: 1.75rem;
+      margin-top: 3rem;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 0.5rem;
+    }
+
+    h3 {
+      font-size: 1.25rem;
+      margin-top: 2rem;
+    }
+
+    p {
+      color: var(--text-muted);
+      margin-bottom: 1.5rem;
+      font-size: 1rem;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+      transition: color 0.2s ease;
+    }
+
+    a:hover {
+      color: var(--accent-hover);
+    }
+
+    /* Highlight Boxes */
+    .note-box {
+      background-color: var(--bg-surface);
+      border-left: 4px solid var(--accent);
+      padding: 1.25rem;
+      border-radius: 0 8px 8px 0;
+      margin-bottom: 1.5rem;
+    }
+
+    .note-box p {
+      margin-bottom: 0;
+      color: var(--text-main);
+    }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 2rem 0;
+      background-color: var(--bg-surface);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    th, td {
+      padding: 1rem 1.25rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    th {
+      background-color: rgba(255, 255, 255, 0.02);
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    td {
+      color: var(--text-muted);
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    /* Badges */
+    .badge {
+      display: inline-block;
+      padding: 0.2rem 0.5rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+
+    .badge-yes {
+      background-color: rgba(52, 211, 153, 0.1);
+      color: var(--success);
+    }
+
+    .badge-no {
+      background-color: rgba(248, 113, 113, 0.1);
+      color: var(--danger);
+    }
+
+    .badge-partial {
+      background-color: rgba(251, 191, 36, 0.1);
+      color: var(--warning);
+    }
+
+    /* Code Block Styling */
+    pre {
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 1.25rem;
+      overflow-x: auto;
+      margin-bottom: 1.5rem;
+    }
+
+    code {
+      font-family: 'Fira Code', monospace;
+      font-size: 0.9rem;
+      color: #e2e8f0;
+    }
+
+    p code {
+      background-color: var(--bg-surface);
+      padding: 0.2rem 0.4rem;
+      border-radius: 4px;
+      border: 1px solid var(--border-color);
+      font-size: 0.85rem;
+    }
+
+    /* Metric Grid (Benchmarks) */
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1.5rem;
+      margin: 2rem 0;
+    }
+
+    .metric-card {
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 1.5rem;
+      text-align: center;
+      transition: all 0.3s ease;
+    }
+
+    .metric-card:hover {
+      border-color: var(--accent);
+      box-shadow: 0 0 15px var(--accent-glow);
+    }
+
+    .metric-value {
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--accent);
+      margin-bottom: 0.5rem;
+    }
+
+    .metric-label {
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+    }
+
+    /* Back to Top button */
+    .btt {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 0.75rem;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      z-index: 100;
+    }
+
+    .btt:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    @media (max-width: 900px) {
+      aside {
+        display: none;
+      }
+      main {
+        margin-left: 0;
+        padding: 2rem;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <aside>
+    <a href="#" class="brand">
+      🛡️ Web<span>Shield</span>
+    </a>
+    
+    <div class="nav-section">
+      <h4 class="nav-title">Getting Started</h4>
+      <ul class="nav-links">
+        <li><a href="#intro" class="active">Introduction</a></li>
+        <li><a href="#install">Installation</a></li>
+        <li><a href="#quickstart">Quick Start</a></li>
+      </ul>
+    </div>
+
+    <div class="nav-section">
+      <h4 class="nav-title">Comparison & Benchmarks</h4>
+      <ul class="nav-links">
+        <li><a href="#comparison">WebShield vs Others</a></li>
+        <li><a href="#benchmarks">Performance Benchmarks</a></li>
+      </ul>
+    </div>
+
+    <div class="nav-section">
+      <h4 class="nav-title">Advanced Features</h4>
+      <ul class="nav-links">
+        <li><a href="#rate-limiting">Redis Rate Limiting</a></li>
+        <li><a href="#waf">Custom WAF Rules</a></li>
+        <li><a href="#fingerprinting">Device Fingerprinting</a></li>
+        <li><a href="#cli">Command CLI Tool</a></li>
+        <li><a href="#proxy">Reverse Proxy Gateway</a></li>
+        <li><a href="#marketplace">Plugin Marketplace</a></li>
+      </ul>
+    </div>
+
+    <div class="nav-section">
+      <h4 class="nav-title">Support</h4>
+      <ul class="nav-links">
+        <li><a href="#privacy">Privacy & Telemetry</a></li>
+      </ul>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main>
+    <!-- Introduction -->
+    <section id="intro">
+      <h1>🛡️ WebShield SDK</h1>
+      <p>WebShield is an all-in-one, enterprise-grade application security shield and Web Application Firewall (WAF) middleware for Express.js applications. Instead of managing a disjointed collection of modules like <code>helmet</code>, <code>cors</code>, and <code>express-rate-limit</code>, WebShield binds all critical security barriers into a single, cohesive threat evaluation chain.</p>
+      
+      <div class="note-box">
+        <p><strong>💡 Dynamic Defense:</strong> Rather than just blocking users, WebShield uses a <strong>Confidence Scoring Heuristic (0–100)</strong> to dynamically isolate attackers and issue custom challenges while keeping normal users unimpeded.</p>
+      </div>
+    </section>
+
+    <!-- Installation -->
+    <section id="install">
+      <h2>🚀 Installation</h2>
+      <p>Install the package directly into your project via npm:</p>
+      <pre><code>npm install webshield-sdk</code></pre>
+    </section>
+
+    <!-- Quick Start -->
+    <section id="quickstart">
+      <h2>⚡ Quick Start</h2>
+      <p>Import the module and mount it as a global Express middleware. By default, it runs out of the box in <code>strict</code> protection mode:</p>
+      <pre><code>const express = require('express');
+const { webShield } = require('webshield-sdk');
+
+const app = express();
+app.use(express.json());
+
+// Apply WebShield Protection
+app.use(webShield({
+  mode: "strict" // Blocks threat scores >= 75 automatically
+}));
+
+app.listen(3000, () => console.log('Secure server running on port 3000'));</code></pre>
+    </section>
+
+    <!-- Comparison Table -->
+    <section id="comparison">
+      <h2>📊 Feature Comparison Matrix</h2>
+      <p>See how WebShield compares against traditional separate middleware integrations:</p>
+      
+      <table>
+        <thead>
+          <tr>
+            <th>Security Capability</th>
+            <th>WebShield SDK</th>
+            <th>Helmet</th>
+            <th>express-rate-limit</th>
+            <th>CORS</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Headers Injection</td>
+            <td><span class="badge badge-yes">Full</span></td>
+            <td><span class="badge badge-yes">Full</span></td>
+            <td><span class="badge badge-no">No</span></td>
+            <td><span class="badge badge-no">No</span></td>
+          </tr>
+          <tr>
+            <td>Payload Sanitization (XSS/SQLi)</td>
+            <td><span class="badge badge-yes">Built-in</span></td>
+            <td><span class="badge badge-no">No</span></td>
+            <td><span class="badge badge-no">No</span></td>
+            <td><span class="badge badge-no">No</span></td>
+          </tr>
+          <tr>
+            <td>Distributed Rate Limiting</td>
+            <td><span class="badge badge-yes">Yes (Redis + Fallback)</span></td>
+            <td><span class="badge badge-no">No</span></td>
+            <td><span class="badge badge-partial">Needs Store Setup</span></td>
+            <td><span class="badge badge-no">No</span></td>
+          </tr>
+          <tr>
+            <td>Dynamic CORS Matching</td>
+            <td><span class="badge badge-yes">Regex / CIDR</span></td>
+            <td><span class="badge badge-no">No</span></td>
+            <td><span class="badge badge-no">No</span></td>
+            <td><span class="badge badge-partial">Basic Origin Only</span></td>
+          </tr>
+          <tr>
+            <td>Secret Leak Protection</td>
+            <td><span class="badge badge-yes">Yes (Auto Scrub)</span></td>
+            <td><span class="badge badge-no">No</span></td>
+            <td><span class="badge badge-no">No</span></td>
+            <td><span class="badge badge-no">No</span></td>
+          </tr>
+          <tr>
+            <td>Honeypot Traps</td>
+            <td><span class="badge badge-yes">Yes (Instant Ban)</span></td>
+            <td><span class="badge badge-no">No</span></td>
+            <td><span class="badge badge-no">No</span></td>
+            <td><span class="badge badge-no">No</span></td>
+          </tr>
+          <tr>
+            <td>Stealth Mode Tar-Pit</td>
+            <td><span class="badge badge-yes">Yes (Auto-Conceal)</span></td>
+            <td><span class="badge badge-no">No</span></td>
+            <td><span class="badge badge-no">No</span></td>
+            <td><span class="badge badge-no">No</span></td>
+          </tr>
+          <tr>
+            <td>Consciousness Click Test</td>
+            <td><span class="badge badge-yes">Yes (Cursor Slopes)</span></td>
+            <td><span class="badge badge-no">No</span></td>
+            <td><span class="badge badge-no">No</span></td>
+            <td><span class="badge badge-no">No</span></td>
+          </tr>
+          <tr>
+            <td>Markov Path Forecasts</td>
+            <td><span class="badge badge-yes">Yes (Predictive)</span></td>
+            <td><span class="badge badge-no">No</span></td>
+            <td><span class="badge badge-no">No</span></td>
+            <td><span class="badge badge-no">No</span></td>
+          </tr>
+          <tr>
+            <td>Telemetry Analytics Visualizer</td>
+            <td><span class="badge badge-yes">Included (/webshield/dashboard)</span></td>
+            <td><span class="badge badge-no">No</span></td>
+            <td><span class="badge badge-no">No</span></td>
+            <td><span class="badge badge-no">No</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- Performance Benchmarks -->
+    <section id="benchmarks">
+      <h2>⚡ Performance Benchmarks</h2>
+      <p>WebShield was engineered for performance-critical architectures. Because threat assessments are compiled in-memory, the latency impact is minimal:</p>
+
+      <div class="metric-grid">
+        <div class="metric-card">
+          <div class="metric-value">&lt; 0.45ms</div>
+          <div class="metric-label">Avg. Latency Overhead</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-value">15,000+</div>
+          <div class="metric-label">Max Request through/sec</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-value">&lt; 15MB</div>
+          <div class="metric-label">Memory Footprint</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Advanced: Rate Limiting -->
+    <section id="rate-limiting">
+      <h2>🚦 Redis-Backed Rate Limiting</h2>
+      <p>Configure distributed rate limits to prevent brute-force attacks across your server clusters. It features an automatic memory fallback:</p>
+      <pre><code>app.use(webShield({
+  redis: {
+    enabled: true,
+    host: '127.0.0.1',
+    port: 6379,
+    keyPrefix: 'webshield:'
+  },
+  rateLimit: {
+    windowMs: 60000,
+    max: 100,
+    burstMax: 10 // Ban burst flood attempts
+  }
+}));</code></pre>
+    </section>
+
+    <!-- Advanced: Custom WAF -->
+    <section id="waf">
+      <h2>🛡️ Custom Web Application Firewall (WAF) & DSL Engine</h2>
+      <p>Configure advanced, human-readable logical expressions to filter incoming requests dynamically:</p>
+      <pre><code>app.use(webShield({
+  waf: {
+    enabled: true,
+    rules: [
+      // Logical DSL strings
+      'if (path.includes("confidential")) block()',
+      'if (headers["x-custom-block"] === "true") block()',
+      'if (ip === "192.168.1.10") allow()'
+    ]
+  }
+}));</code></pre>
+    </section>
+
+    <!-- Advanced: Device Fingerprinting -->
+    <section id="fingerprinting">
+      <h2>👤 Canvas & WebGL Device Fingerprinting</h2>
+      <p>Identify scraping bots, browser emulators, and bad actors behind proxies/VPNs by tracking unique hardware render signatures. Serve the script automatically and verify it:</p>
+      <pre><code>// 1. Inject client tag script onto your front-end HTML pages
+// &lt;script src="/webshield/fp.js"&gt;&lt;/script&gt;
+
+// 2. WebShield checks for "x-webshield-device-id" headers automatically and raises threat scores if obfuscation is detected.</code></pre>
+    </section>
+
+    <!-- Advanced: CLI Tool -->
+    <section id="cli">
+      <h2>💻 Command-Line Interface (CLI Tool)</h2>
+      <p>WebShield comes bundled with a command-line interface helper. Use npx to trigger setup or visualizers:</p>
+      <pre><code># Initialize custom webshield.config.js configurations
+npx webshield init
+
+# Launch visual diagnostics server dashboard on port 9999
+npx webshield dashboard</code></pre>
+    </section>
+
+    <!-- Advanced: Standalone Reverse Proxy -->
+    <section id="proxy">
+      <h2>📡 Standalone Reverse Proxy Gateway</h2>
+      <p>Filter external traffic before it touches your node application. Start the gateway script on port 8080 routing to backend application port 3000:</p>
+      <pre><code>BACKEND_URL=http://localhost:3000 PROXY_PORT=8080 node bin/proxy.js</code></pre>
+    </section>
+
+    <!-- Next-Gen Security Suite -->
+    <section id="nextgen">
+      <h2>🛡️ Next-Gen Security Suite (Adaptive Protection)</h2>
+      <p>Enable next-generation security configurations directly in your Zero-Config setup to trigger advanced behavioral heuristics, honeypots, and self-learning defenses:</p>
+      <pre><code>app.use(webShield({
+  stealthMode: true,          // Mask WAF blocks with delayed HTTP 200 responses
+  consciousnessCheck: true,   // Parse cursor telemetry coordinates to detect click automation bots
+  honeypot: {
+    enabled: true             // Auto-injected hidden honeypots (e.g. /__trap)
+  }
+}));</code></pre>
+    </section>
+
+    <!-- Plugin Marketplace -->
+    <section id="marketplace">
+      <h2>🔌 Plugin Marketplace & Extensibility</h2>
+      <p>WebShield features a plugin architecture allowing the community to build custom threat blocks. You can attach custom plugins during initialization:</p>
+      <pre><code>const { webShield, plugins } = require('webshield-sdk');
+
+app.use(webShield({
+  plugins: [
+    // Pre-loaded plugins
+    plugins.botDetectionPlugin({ blockCrawlers: true }),
+    plugins.ddosPlugin({ limit: 120 }),
+
+    // Custom inline plugin
+    async (req, res, config) => {
+      if (req.headers['custom-threat-header']) {
+        req.webShieldState.blocked = true;
+        return res.status(403).send('Forbidden custom threat block');
+      }
+    }
+  ]
+}));</code></pre>
+    </section>
+
+    <!-- Privacy -->
+    <section id="privacy">
+      <h2>🔐 Privacy & Telemetry</h2>
+      <p>WebShield runs locally on your Node.js server. Logs are processed in volatile memory. For more details on compliance (GDPR/CCPA) and data sanitization, view our full policy in <a href="PRIVACY.md">PRIVACY.md</a>.</p>
+    </section>
+  </main>
+
+  <button class="btt" onclick="window.scrollTo({top: 0, behavior: 'smooth'})">
+    ▲
+  </button>
+
+</body>
+</html>

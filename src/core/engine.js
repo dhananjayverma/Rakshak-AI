@@ -9,6 +9,15 @@ const { csrfGuardMiddleware } = require('../middleware/csrfGuard');
 const { corsGuardMiddleware } = require('../middleware/corsGuard');
 const { initCloudSync, sendSyncLog } = require('../services/cloudSync');
 const { initAlerts, sendAlert } = require('../services/alertService');
+const { initForensics, logForensicEvent } = require('../services/forensics');
+const { initPatchEngine } = require('../services/patchEngine');
+const { recordAttackPath, predictNextTarget } = require('../services/attackGraph');
+const { dynamicHoneypotMiddleware } = require('../middleware/dynamicHoneypot');
+const { consciousnessMiddleware } = require('../middleware/consciousness');
+const { stealthModeMiddleware } = require('../middleware/stealthMode');
+const graphqlGuard = require('../middleware/graphqlGuard');
+const schemaGuard = require('../middleware/schemaGuard');
+const challengeMiddleware = require('../middleware/challenge');
 
 // Memory store to keep last 50 threat logs for Dashboard viewer
 const dashboardLogs = [];
@@ -25,6 +34,10 @@ class WebShield {
     if (this.config.waf) Object.freeze(this.config.waf);
     if (this.config.riskBasedAccess) Object.freeze(this.config.riskBasedAccess);
     if (this.config.cors) Object.freeze(this.config.cors);
+    if (this.config.graphql) Object.freeze(this.config.graphql);
+    if (this.config.schemaValidation) Object.freeze(this.config.schemaValidation);
+    if (this.config.challenge) Object.freeze(this.config.challenge);
+    if (this.config.forensics) Object.freeze(this.config.forensics);
 
     // Initialize Logger
     initializeLogger(this.config);
@@ -35,6 +48,9 @@ class WebShield {
     
     // Initialize Remote Cloud Syncing
     initCloudSync(this.config);
+
+    // Initialize Forensics Service
+    initForensics(this.config);
     
     // Setup Global Threat Network Syncing
     if (this.config.globalThreatNetwork && this.config.globalThreatNetwork.enabled) {
@@ -44,6 +60,20 @@ class WebShield {
     // Load custom plugins
     this.plugins = this.config.plugins || [];
     logger.info(`Loaded ${this.plugins.length} active plugins.`);
+
+    // Compile dynamic rules list (which can be hot-patched in memory by autoPatch)
+    this.activeRules = [...(this.config.waf.rules || [])];
+
+    // Initialize Auto-Patch Engine
+    if (this.config.autoPatch && this.config.autoPatch.enabled) {
+      initPatchEngine(this.config, this);
+    }
+
+    // Load configurations from Vault
+    const { loadSecretsFromVault } = require('../services/vault');
+    loadSecretsFromVault(this.config).catch(err => {
+      logger.warn(`Vault initialization warning: ${err.message}`);
+    });
   }
 
   startGlobalThreatSync() {
@@ -62,13 +92,25 @@ class WebShield {
   }
 
   evaluateWafRules(req, res) {
-    if (!this.config.waf || !this.config.waf.enabled) return false;
+    const config = req.webShieldConfig || this.config;
+    if (!config.waf || !config.waf.enabled) return false;
     
     const path = req.path || req.url;
     const { getClientIp } = require('../utils/helpers');
     const ip = getClientIp(req);
 
-    for (const rule of this.config.waf.rules) {
+    const rules = config.waf.rules || this.activeRules;
+
+    for (const rule of rules) {
+      if (typeof rule === 'string') {
+        const { evaluateDslRule } = require('./ruleEngine');
+        const triggered = evaluateDslRule(rule, req, res);
+        if (triggered) {
+          return true; // Already handled by rule engine
+        }
+        continue;
+      }
+
       if (rule.type === 'path' && path === rule.value) {
         logger.warn(`[Req ID: ${req.id}] WAF Rule block triggered on path match: ${path}`);
         return true;
@@ -126,15 +168,27 @@ class WebShield {
       req.id = uuidv4();
 
       // Serve basic log visualizer endpoint
-      if (req.path === '/webshield/dashboard') {
+      if (req.path === '/webshield' || req.path === '/webshield/dashboard') {
         return this.serveDashboard(req, res);
       }
 
+      // Serve client-side Canvas/WebGL device fingerprinting tag
+      if (req.path === '/webshield/fp.js') {
+        const { getFingerprintScript } = require('./fingerprintTag');
+        res.setHeader('Content-Type', 'application/javascript');
+        return res.status(200).send(getFingerprintScript());
+      }
+
+      // Resolve Tenant Config dynamics
+      const { tenantResolverMiddleware } = require('../middleware/tenantResolver');
+      const resolveTenant = tenantResolverMiddleware(this.config);
+      await new Promise(resolve => resolveTenant(req, res, resolve));
+
       // 2. System Isolation Check (Zero-Trust lockdown mode)
-      if (this.config.isolated) {
+      if (req.webShieldConfig.isolated) {
         const { getClientIp } = require('../utils/helpers');
         const ip = getClientIp(req);
-        if (!this.config.allowlist || !this.config.allowlist.includes(ip)) {
+        if (!req.webShieldConfig.allowlist || !req.webShieldConfig.allowlist.includes(ip)) {
           logger.warn(`[Req ID: ${req.id}] Blocked request from ${ip} due to Active System Isolation Mode.`);
           return res.status(503).send('Service Temporarily Unavailable: System is isolated for security incident response.');
         }
@@ -151,20 +205,20 @@ class WebShield {
         };
 
         // 2. Injected Security Headers (Helmet-like)
-        if (this.config.protection.headers) {
+        if (req.webShieldConfig.protection.headers) {
           res.setHeader('X-Content-Type-Options', 'nosniff');
           res.setHeader('X-Frame-Options', 'DENY');
           res.setHeader('X-XSS-Protection', '1; mode=block');
           res.setHeader('Referrer-Policy', 'no-referrer');
           res.setHeader('Content-Security-Policy', "default-src 'self'");
-          if (this.config.protection.secureCookies) {
+          if (req.webShieldConfig.protection.secureCookies) {
             res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
           }
         }
 
         // 3. Dynamic CORS evaluation
         try {
-          const runCors = corsGuardMiddleware(this.config);
+          const runCors = corsGuardMiddleware(req.webShieldConfig);
           await new Promise((resolve, reject) => {
             runCors(req, res, (err) => {
               if (err) return reject(err);
@@ -176,39 +230,78 @@ class WebShield {
           return res.status(403).send('Forbidden: CORS block.');
         }
 
+        // 3.1. Mapped Attacker sequences tracking & forecasting
+        const clientIp = req.ip || req.connection.remoteAddress || '127.0.0.1';
+        recordAttackPath(clientIp, req.path || req.url);
+        predictNextTarget(clientIp);
+
+        // 3.2. Consciousness click trajectory telemetries check
+        const runConsciousness = consciousnessMiddleware(req.webShieldConfig);
+        await new Promise(resolve => runConsciousness(req, res, resolve));
+
         // 4. Custom WAF evaluation
         if (this.evaluateWafRules(req, res)) {
           req.webShieldState.blocked = true;
-          return res.status(403).send('Forbidden: WAF rule enforcement.');
+          
+          // Sandboxed rule mutation triggering
+          const { analyzeAndMutate } = require('../services/sandboxEngine');
+          analyzeAndMutate(req.path || req.url, 'WAF');
+
+          // Trigger Stealth mode tarpit check if configured
+          const runStealth = stealthModeMiddleware(req.webShieldConfig);
+          return runStealth(req, res, () => res.status(403).send('Forbidden: WAF rule enforcement.'));
         }
 
-        // 4. Honeypot check
-        if (this.config.honeypot.enabled) {
-          const honeyBlock = honeypotMiddleware(this.config);
-          await honeyBlock(req, res);
+        // 4.1. Adaptive Honeypot 2.0 dynamic configuration blocks
+        if (req.webShieldConfig.honeypot.enabled) {
+          const honeyBlock = dynamicHoneypotMiddleware(req.webShieldConfig);
+          await new Promise(resolve => honeyBlock(req, res, resolve));
           if (req.webShieldState.blocked) return;
         }
 
         // 5. IP Blocklist & Geo Blocking
-        const ipBlock = ipBlockerMiddleware(this.config);
+        const ipBlock = ipBlockerMiddleware(req.webShieldConfig);
         await ipBlock(req, res);
         if (req.webShieldState.blocked) return;
 
         // 6. Rate Limiter (IP + User + Burst)
-        const rateLimit = rateLimiterMiddleware(this.config);
+        const rateLimit = rateLimiterMiddleware(req.webShieldConfig);
         await rateLimit(req, res);
         if (req.webShieldState.blocked) return;
 
         // 7. CSRF Check
-        if (this.config.protection.csrf) {
-          const csrfGuard = csrfGuardMiddleware(this.config);
+        if (req.webShieldConfig.protection.csrf) {
+          const csrfGuard = csrfGuardMiddleware(req.webShieldConfig);
           await csrfGuard(req, res);
-          if (req.webShieldState.blocked) return;
+          if (req.webShieldState.blocked) {
+            logForensicEvent(req, 40, ['CSRF token mismatch or missing']);
+            return;
+          }
+        }
+
+        // 7.1. GraphQL Protection (Depth limit check)
+        if (req.webShieldConfig.graphql.enabled) {
+          const runGraphql = graphqlGuard(req.webShieldConfig.graphql);
+          runGraphql(req, res);
+          if (req.webShieldState.blocked) {
+            logForensicEvent(req, 60, ['GraphQL query depth complexity exceeded']);
+            return;
+          }
+        }
+
+        // 7.2. API Schema Validation check
+        if (req.webShieldConfig.schemaValidation.enabled) {
+          const runSchema = schemaGuard(req.webShieldConfig.schemaValidation);
+          runSchema(req, res);
+          if (req.webShieldState.blocked) {
+            logForensicEvent(req, 50, ['Payload schema validation failed']);
+            return;
+          }
         }
 
         // 8. Request Size Limit Enforcement
-        if (this.config.protection.requestSizeLimit) {
-          const limitStr = this.config.protection.requestSizeLimit.toLowerCase();
+        if (req.webShieldConfig.protection.requestSizeLimit) {
+          const limitStr = req.webShieldConfig.protection.requestSizeLimit.toLowerCase();
           let limitBytes = 2 * 1024 * 1024; // Default 2mb
           if (limitStr.endsWith('kb')) {
             limitBytes = parseInt(limitStr) * 1024;
@@ -226,17 +319,22 @@ class WebShield {
         // 9. Plugin hook (Pre-scoring)
         for (const plugin of this.plugins) {
           if (typeof plugin === 'function') {
-            await plugin(req, res, this.config);
+            await plugin(req, res, req.webShieldConfig);
             if (req.webShieldState.blocked) return;
           }
         }
 
         // 10. Run Threat Engine calculation
-        const threat = calculateThreatScore(req, this.config);
+        const threat = calculateThreatScore(req, req.webShieldConfig);
         req.webShieldThreat = threat;
 
+        // Print debug WAF telemetries to stdout
+        if (req.webShieldConfig.debug) {
+          console.log(`\x1b[33m[WebShield Debug]\x1b[0m ${req.method} ${req.path || req.url} | IP: ${clientIp} | Score: ${threat.score} (${threat.riskLevel}) | Blocks: ${threat.reasons.join('; ') || 'None'}`);
+        }
+
         // 11. Risk-Based response handling (Captcha vs Block)
-        if (this.config.riskBasedAccess.enabled && threat.needsCaptcha) {
+        if (req.webShieldConfig.riskBasedAccess.enabled && threat.needsCaptcha) {
           logger.warn(`[Req ID: ${req.id}] Risk evaluation triggered CAPTCHA challenge. Threat Score: ${threat.score}`);
           return res.status(401).json({
             status: 'auth_challenge',
@@ -246,11 +344,24 @@ class WebShield {
           });
         }
 
+        // 11.1. Adaptive Captcha / Challenge check
+        if (req.webShieldConfig.challenge.enabled) {
+          const runChallenge = challengeMiddleware(req.webShieldConfig.challenge);
+          runChallenge(req, res, threat.score);
+          if (req.webShieldState.blocked) {
+            logForensicEvent(req, threat.score, ['Adaptive math challenge served']);
+            return;
+          }
+        }
+
         // 12. Auto-Response Engine block execution
         if (threat.score >= 70 || threat.isMalicious) {
           const ip = req.ip || req.connection.remoteAddress || '127.0.0.1';
           logger.warn(`[Req ID: ${req.id}] Threat detected! IP: ${ip} - Score: ${threat.score}. Reasons: ${threat.reasons.join(', ')}`);
           
+          // Log Forensics incident
+          logForensicEvent(req, threat.score, threat.reasons);
+
           // Append to memory log queue for dashboard visualization
           dashboardLogs.unshift({
             id: req.id,
@@ -286,9 +397,16 @@ class WebShield {
             url: req.originalUrl || req.url
           });
 
-          if (this.config.mode === 'strict' && this.config.autoResponse.block) {
+          if (req.webShieldConfig.mode === 'strict' && req.webShieldConfig.autoResponse.block) {
             req.webShieldState.blocked = true;
-            return res.status(403).send(this.config.autoResponse.customBlockResponse);
+
+            // Trigger dynamic rule mutations inside sandbox
+            const { analyzeAndMutate } = require('../services/sandboxEngine');
+            analyzeAndMutate(req.originalUrl || req.url, 'ScoringEngine');
+
+            // Trigger Stealth mode tarpit check if configured
+            const runStealth = stealthModeMiddleware(req.webShieldConfig);
+            return runStealth(req, res, () => res.status(403).send(req.webShieldConfig.autoResponse.customBlockResponse));
           }
         }
 

@@ -1,11 +1,15 @@
 {
   "name": "webshield-sdk",
-  "version": "1.0.1",
+  "version": "1.2.1",
   "description": "Enterprise-Grade Plug-and-Play Security SDK & WAF for Node.js/Express. Protects against DDoS, XSS, NoSQLi, SQLi, CSRF, and data leaks.",
   "main": "src/index.js",
+  "bin": {
+    "webshield": "./bin/cli.js"
+  },
   "scripts": {
     "test": "node test.js",
-    "start": "node test_app.js"
+    "start": "node test_app.js",
+    "benchmark": "node benchmark.js"
   },
   "keywords": [
     "security",
@@ -28,8 +32,11 @@
   "type": "commonjs",
   "files": [
     "src",
+    "docs",
+    "bin",
     "README.md",
-    "PRIVACY.md"
+    "PRIVACY.md",
+    "benchmark.js"
   ],
   "dependencies": {
     "axios": "^1.7.2",

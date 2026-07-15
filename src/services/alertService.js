@@ -41,16 +41,38 @@ async function sendAlert(subject, data) {
     }
   }
 
-  // Send Webhook Alert
+  // Send Webhook Alert (supporting rich Slack and Discord integrations)
   if (alertsConfig.webhook && alertsConfig.webhook.enabled && alertsConfig.webhook.url) {
     try {
       const axios = require('axios');
-      await axios.post(alertsConfig.webhook.url, {
+      const url = alertsConfig.webhook.url;
+      let payload = {
         event: 'security_alert',
         subject,
         timestamp: new Date().toISOString(),
         data
-      });
+      };
+
+      // Slack Rich Formatting
+      if (url.includes('hooks.slack.com')) {
+        payload = {
+          text: `🚨 *WebShield Alert: ${subject}*\n\`\`\`${JSON.stringify(data, null, 2)}\`\`\``
+        };
+      }
+      // Discord Rich Formatting
+      else if (url.includes('discord.com/api/webhooks')) {
+        payload = {
+          content: `⚠️ **WebShield Security Threat Triggered**`,
+          embeds: [{
+            title: subject,
+            color: 15158332, // Red color
+            description: `\`\`\`json\n${JSON.stringify(data, null, 2)}\n\`\`\``,
+            timestamp: new Date().toISOString()
+          }]
+        };
+      }
+
+      await axios.post(url, payload);
       logger.info('WebShield Webhook alert sent successfully.');
     } catch (err) {
       logger.error(`Failed to send Webhook alert: ${err.message}`);

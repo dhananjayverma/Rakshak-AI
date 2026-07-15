@@ -3,7 +3,9 @@
  */
 const defaultConfig = {
   apiKey: null,
-  mode: 'strict', // 'strict' (block immediately) or 'monitor' (log and flag only)
+  // Smart Auto Mode: Default to strict in production, monitor in dev
+  mode: process.env.NODE_ENV === 'production' ? 'strict' : 'monitor',
+  debug: false, // Verbose console trace logs
   isolated: false, // Zero-Trust Isolation Mode: blocks all non-allowlisted traffic
   
   // Redis store configuration for distributed rate limiting & global blacklist
@@ -71,8 +73,8 @@ const defaultConfig = {
   waf: {
     enabled: true,
     rules: [
-      // Example rule: { type: 'path', action: 'block', value: '/confidential' }
-      // Example rule: { type: 'header', action: 'block', key: 'user-agent', value: 'badbot' }
+      // Custom DSL Logic check rule
+      'if (path.includes("forbidden")) block()'
     ]
   },
 
@@ -98,7 +100,7 @@ const defaultConfig = {
 
   honeypot: {
     enabled: true,
-    paths: ['/admin', '/.env', '/wp-admin', '/config', '/setup.php', '/actuator/health'],
+    paths: ['/admin', '/.env', '/wp-admin', '/config', '/setup.php', '/actuator/health', '/__trap'],
     banDuration: 86400 // 24 hours for honeypot hits
   },
 
@@ -138,6 +140,47 @@ const defaultConfig = {
     syncIntervalMs: 5000
   },
 
+  // GraphQL query protection settings
+  graphql: {
+    enabled: false,
+    maxDepth: 7, // Depth limit
+    depthBanThreshold: 10 // Instantly ban if depth is excessively high
+  },
+
+  // Request schema validation rules (Zod-like JSON validation)
+  schemaValidation: {
+    enabled: false,
+    schemas: {} // format: { '/api/route': { requiredFields: ['email'], allowedFields: ['email', 'name'] } }
+  },
+
+  // Adaptive Challenge configuration (Medium threat score responses)
+  challenge: {
+    enabled: false,
+    captchaUrl: 'https://challenges.cloudflare.com/turnstile/v0/api.js',
+    thresholdMin: 50,
+    thresholdMax: 74
+  },
+
+  // Forensics reporting and local request logging
+  forensics: {
+    enabled: true,
+    logPath: 'webshield-forensics.json',
+    maxLogs: 100
+  },
+
+  // Auto Patch rules synchronization
+  autoPatch: {
+    enabled: false,
+    feedUrl: 'https://rules.webshield-sdk.com/signatures.json',
+    intervalMs: 300000 // 5 minutes
+  },
+
+  // Stealth masking tarpit
+  stealthMode: false,
+
+  // Human vs Bot consciousness coordinate verification
+  consciousnessCheck: false,
+
   plugins: []
 };
 
@@ -171,6 +214,11 @@ Object.freeze(defaultConfig.rateLimit);
 Object.freeze(defaultConfig.ip);
 Object.freeze(defaultConfig.waf);
 Object.freeze(defaultConfig.riskBasedAccess);
+Object.freeze(defaultConfig.graphql);
+Object.freeze(defaultConfig.schemaValidation);
+Object.freeze(defaultConfig.challenge);
+Object.freeze(defaultConfig.forensics);
+Object.freeze(defaultConfig.autoPatch);
 
 module.exports = {
   defaultConfig,

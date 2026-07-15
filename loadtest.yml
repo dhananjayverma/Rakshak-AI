@@ -1,0 +1,30 @@
+config:
+  target: "http://localhost:3000"
+  phases:
+    - duration: 30
+      arrivalRate: 10
+      name: "Warm-up phase (10 users/sec)"
+    - duration: 60
+      arrivalRate: 10
+      rampTo: 50
+      name: "Ramp-up phase (10 -> 50 users/sec)"
+    - duration: 30
+      arrivalRate: 100
+      name: "Spike phase (100 users/sec)"
+  defaults:
+    headers:
+      x-webshield-device-id: "load-tester-fingerprint-999"
+      accept-language: "en-US,en;q=0.9"
+      user-agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+scenarios:
+  - flow:
+      - get:
+          url: "/"
+      - post:
+          url: "/submit"
+          json:
+            username: "tester_user"
+            action: "ping"
+      - get:
+          url: "/public"
