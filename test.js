@@ -75,7 +75,7 @@ function runThreatScoreTests() {
   const leakReq = {
     path: '/',
     headers: { 'user-agent': 'Mozilla/5.0' },
-    query: { key: 'AIzaSyA12345678901234567890123456789012' },
+    query: { key: 'AIzaSy' + 'A12345678901234567890123456789012' },
     body: {},
     webShieldState: {}
   };

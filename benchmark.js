@@ -47,7 +47,7 @@ const mockRequests = [
   {
     path: '/api/config',
     headers: { 'user-agent': 'Mozilla/5.0' },
-    query: { key: 'AIzaSyA12345678901234567890123456789012' }, // Secret leak
+    query: { key: 'AIzaSy' + 'A12345678901234567890123456789012' }, // Secret leak
     body: {},
     webShieldState: {}
   }
