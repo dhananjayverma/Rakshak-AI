@@ -34,6 +34,90 @@ By installing WebShield, you get a comprehensive, unified security suite that in
 
 ---
 
+## ⚔️ Threat Model: Real Attacks & WebShield Protections
+
+WebShield isn't just a static middleware—it is a **defense framework** built specifically to identify, mitigate, and neutralize active hacker vectors. Below is the mapping of how WebShield addresses real-world attacks.
+
+### 1. SQL Injection (SQLi)
+*   **The Threat:** Attackers input SQL command fragments (e.g. `' OR 1=1 --`) in input forms to bypass authentication or dump database schemas.
+*   **How WebShield Defends:** `src/core/threatScore.js` scans incoming parameters using active regex heuristical scores.
+*   **Config Toggle:** Enable WAF SQLi parsing:
+    ```javascript
+    protection: { sqlInjection: true }
+    ```
+
+### 2. Cross-Site Scripting (XSS)
+*   **The Threat:** Malicious JavaScript injected via input fields (e.g. `<script>alert("hacked")</script>`) to hijack user session cookies.
+*   **How WebShield Defends:** Scans request bodies, query strings, and headers, blocking execution vectors before they can be saved to a database.
+*   **Config Toggle:** Enable WAF XSS scanning:
+    ```javascript
+    protection: { xss: true }
+    ```
+
+### 3. NoSQL Injection
+*   **The Threat:** Input parameters containing MongoDB operators (e.g. `{ "username": { "$ne": null } }`) to bypass validation.
+*   **How WebShield Defends:** Scans query objects and nested payloads for operators like `$ne`, `$gt`, `$where`.
+*   **Config Toggle:** Enable NoSQL safety checks:
+    ```javascript
+    protection: { nosqlInjection: true }
+    ```
+
+### 4. Distributed Denial of Service (DDoS)
+*   **The Threat:** Massive request flood from dynamic botnets attempting to crash your server.
+*   **How WebShield Defends:** Sliding-window rate limit checks backed by Redis, backed up with `plugins.ddosPlugin` for threshold blocks.
+*   **Config Toggle:** Define rate limits and load plugins:
+    ```javascript
+    rateLimit: { windowMs: 60000, max: 100 },
+    plugins: [ plugins.ddosPlugin({ limit: 150 }) ]
+    ```
+
+### 5. Slowloris Attacks (Connection Exhaustion)
+*   **The Threat:** Sending slow, incomplete headers/requests to hold connections open and freeze the server threads.
+*   **How WebShield Defends:** `ddosSmartMode.js` dynamic tar-pits introduce small delays to slow-paced attackers, letting legit traffic bypass immediately.
+*   **Config Toggle:** Enable DDoS Smart Mode:
+    ```javascript
+    ddosSmartMode: { enabled: true }
+    ```
+
+### 6. Directory/Secrets Scanning
+*   **The Threat:** Attackers scanning standard configuration routes (e.g., `/.env`, `/wp-admin`, `/config.json`) looking for passwords and credentials.
+*   **How WebShield Defends:** Decoy honeypots intercept these paths and dynamically ban the client IP at the firewall level.
+*   **Config Toggle:** Configure paths to trigger automatic bans:
+    ```javascript
+    honeypot: { enabled: true, paths: ['/.env', '/wp-admin'] }
+    ```
+
+### 7. Brute Force & Credential Stuffing
+*   **The Threat:** Attackers rapidly attempting combinations of credentials on sensitive login routes.
+*   **How WebShield Defends:** High-risk Auth endpoints apply a heavy scoring multiplier if hitting rate thresholds, triggering CAPTCHAs.
+*   **Config Toggle:** Configure risk based thresholds:
+    ```javascript
+    riskBasedAccess: { captchaThreshold: 50, blockThreshold: 75 }
+    ```
+
+### 8. API Abuse & Web Scraping
+*   **The Threat:** Malicious bots harvesting prices/data or abusing access keys by rotating queries.
+*   **How WebShield Defends:** `behavioralTracker.js` tracks request sequence. Sequential integer checks (e.g., `/users/1`, `/users/2`) flag scraping. Token IP store flags tokens shared across 3+ distinct IP addresses.
+*   **Config Toggle:** Default enabled behavior on active threat evaluation.
+
+### 9. Encoded Payload Bypass (Base64/URL Encoding)
+*   **The Threat:** Attacking payloads obfuscated (e.g., `%3Cscript%3E` or Base64 format) to slip past basic scanners.
+*   **How WebShield Defends:** `decodeAndInspect()` dynamically decodes URL encoding, HTML entities, and Base64 sequences before WAF inspection.
+
+### 10. Header Manipulation & IP Spoofing
+*   **The Threat:** Fake headers (like `X-Forwarded-For`) sent by client to masquerade as an allowlisted local developer IP.
+*   **How WebShield Defends:** `request-ip` integration parses client IPs securely, stripping untrusted overrides.
+
+### 11. Token/JWT Tampering
+*   **The Threat:** Modifying signature segments or header declarations to impersonate admins.
+*   **How WebShield Defends:** Checks JWT structures for malformed segment structures or signature expiration before processing request flow.
+
+### 12. Zero-Day Vulnerabilities (Self-Healing)
+*   **The Threat:** New, unknown payloads that aren't matched by default static regex rule databases.
+*   **How WebShield Defends:** `selfHealing.js` monitors blocking events. If a payload is flagged as high-risk, it automatically generates a customized WAF DSL signature rule and patches the active in-memory firewall dynamically.
+
+---
+
 ## 🌟 Key Benefits of WebShield SDK
 
 1.  **Unified Middleware footprint**: Replaces `helmet`, `cors`, `express-rate-limit`, `express-mongo-sanitize`, `xss-clean`, and `hpp` with a single, highly-optimized client stack.
@@ -173,6 +257,36 @@ app.use(webShield({
       }
     }
   ]
+}));
+```
+
+---
+
+## ⚠️ False Positives & Custom Exclusions
+
+Sometimes, legitimate user inputs (such as code snippets inside comments or blog content) might be flagged by the threat scoring engine as a potential attack vector. WebShield makes it easy to bypass audits for trusted routes or users:
+
+### 1. Route-Level Exclusions (Skip WAF checks)
+You can define paths (like Stripe webhooks or rich-text editor inputs) that should bypass WAF payload scans:
+```javascript
+app.use(webShield({
+  protection: {
+    excludePaths: ['/api/posts/create', '/stripe-webhook']
+  }
+}));
+```
+
+### 2. Custom Whitelist Resolver (Bypass for trusted entities)
+You can supply a custom function to dynamically bypass all WAF/Rate Limiting checks (e.g., for system admins or internal networks):
+```javascript
+app.use(webShield({
+  allowlist: (req) => {
+    // Bypass checks for authenticated admin users
+    if (req.user && req.user.role === 'admin') return true;
+    // Bypass for local internal traffic
+    if (req.ip.startsWith('10.0.0.')) return true;
+    return false;
+  }
 }));
 ```
 

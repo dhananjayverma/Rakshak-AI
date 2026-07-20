@@ -126,6 +126,66 @@ function inspectJwtToken(authHeader) {
   return { score: 0, reason: null };
 }
 
+// Token IP store for detecting token abuse (token sharing across multiple IPs)
+const tokenIpStore = new Map();
+// Simple cleanup for token IP store
+setInterval(() => {
+  tokenIpStore.clear();
+}, 300000); // clear every 5 mins
+
+function decodeAndInspect(val, scanFunc) {
+  if (typeof val !== 'string') return 0;
+  
+  let maxScore = scanFunc(val);
+
+  // 1. URL decoding
+  try {
+    const decodedUrl = decodeURIComponent(val);
+    if (decodedUrl !== val) {
+      maxScore = Math.max(maxScore, scanFunc(decodedUrl));
+    }
+  } catch (e) {}
+
+  // 2. HTML Entity decoding (basic)
+  const decodedHtml = val.replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/&quot;/gi, '"').replace(/&#x27;/gi, "'").replace(/&amp;/gi, '&');
+  if (decodedHtml !== val) {
+    maxScore = Math.max(maxScore, scanFunc(decodedHtml));
+  }
+
+  // 3. Base64 attack detection & decoding
+  if (val.length >= 8 && /^[A-Za-z0-9+/=]+$/.test(val)) {
+    try {
+      const decodedBase64 = Buffer.from(val, 'base64').toString('utf8');
+      // Verify if decoded string contains printable ASCII / common characters
+      if (/^[ -~]+$/.test(decodedBase64)) {
+        maxScore = Math.max(maxScore, scanFunc(decodedBase64));
+      }
+    } catch (e) {}
+  }
+
+  return maxScore;
+}
+
+function deepScanObject(obj, scanFunc) {
+  if (typeof obj === 'string') {
+    return decodeAndInspect(obj, scanFunc);
+  }
+  if (!obj || typeof obj !== 'object') {
+    return 0;
+  }
+  let maxScore = 0;
+  if (Array.isArray(obj)) {
+    for (const item of obj) {
+      maxScore = Math.max(maxScore, deepScanObject(item, scanFunc));
+    }
+  } else {
+    for (const key in obj) {
+      maxScore = Math.max(maxScore, deepScanObject(obj[key], scanFunc));
+    }
+  }
+  return maxScore;
+}
+
 /**
  * Calculate Threat Score (0 - 100)
  */
@@ -165,9 +225,59 @@ function calculateThreatScore(req, config) {
     reasons.push('Automation scripting patterns detected (consciousness click telemetry failed)');
   }
 
-  // 4. JWT Authorization Security Inspection
-  const authHeader = req.headers['authorization'];
+  // 3.2. Behavioral Tracking Spike & abnormal navigation check
+  if (req.webShieldState && req.webShieldState.requestSpikeDetected) {
+    score += 40;
+    reasons.push('Behavioral anomaly: Sudden request spike detected');
+  }
+  if (req.webShieldState && req.webShieldState.abnormalNavigationDetected) {
+    score += 30;
+    reasons.push('Behavioral anomaly: Abnormal/bot-like navigation path');
+  }
+
+  // 3.3. API Abuse - Token sharing / Token abuse check
+  const authHeader = req.headers['authorization'] || req.headers['x-api-key'] || '';
   if (authHeader) {
+    const { getClientIp } = require('../utils/helpers');
+    const ip = getClientIp(req);
+    if (!tokenIpStore.has(authHeader)) {
+      tokenIpStore.set(authHeader, new Set());
+    }
+    const ipSet = tokenIpStore.get(authHeader);
+    ipSet.add(ip);
+    if (ipSet.size > 3) {
+      score += 50;
+      reasons.push(`API Abuse: Token shared across ${ipSet.size} distinct IP addresses`);
+    }
+  }
+
+  // 3.4. API Abuse - Data Scraping Pattern check (sequential IDs)
+  const path = req.path || req.url || '';
+  if (/\/(users|products|posts|items)\/\d+$/i.test(path)) {
+    const { trackingStore } = require('../middleware/behavioralTracker');
+    const { getClientIp } = require('../utils/helpers');
+    const ip = getClientIp(req);
+    const tracking = trackingStore.get(ip);
+    if (tracking && tracking.paths.length >= 3) {
+      // Check if last 3 paths have consecutive integer IDs at the end
+      const lastPaths = tracking.paths.slice(-3);
+      const matches = lastPaths.map(p => {
+        const m = p.match(/\/(\d+)$/);
+        return m ? parseInt(m[1], 10) : null;
+      });
+      if (matches.every(m => m !== null)) {
+        const diff1 = matches[1] - matches[0];
+        const diff2 = matches[2] - matches[1];
+        if (Math.abs(diff1) === 1 && Math.abs(diff2) === 1) {
+          score += 45;
+          reasons.push('API Abuse: Data scraping pattern detected (sequential resource ID harvesting)');
+        }
+      }
+    }
+  }
+
+  // 4. JWT Authorization Security Inspection
+  if (authHeader && authHeader.startsWith('Bearer ')) {
     const jwtResult = inspectJwtToken(authHeader);
     if (jwtResult.score > 0) {
       score += jwtResult.score;
@@ -209,7 +319,6 @@ function calculateThreatScore(req, config) {
   }
 
   // 5. Business API Abuse protection (Endpoint-specific analysis)
-  const path = req.path || req.url || '';
   const sensitiveEndpoints = ['/login', '/otp', '/register', '/reset-password'];
   const matchedEndpoint = sensitiveEndpoints.find(end => path.endsWith(end));
   if (matchedEndpoint) {
@@ -224,13 +333,11 @@ function calculateThreatScore(req, config) {
   if (config.secretLeak.enabled) {
     let leakDetected = false;
     
-    // Check body parameters
+    // Check body parameters (with deep inspection)
     if (req.body && typeof req.body === 'object') {
-      for (const key in req.body) {
-        if (typeof req.body[key] === 'string' && checkSecretLeaks(req.body[key], config)) {
-          leakDetected = true;
-          break;
-        }
+      const bodyStr = JSON.stringify(req.body);
+      if (checkSecretLeaks(bodyStr, config)) {
+        leakDetected = true;
       }
     }
     
@@ -248,20 +355,16 @@ function calculateThreatScore(req, config) {
     }
   }
 
-  // 7. Inspect payload (Body, Query, Headers)
+  // 7. Inspect payload (Body, Query, Headers) with Deep Inspection
   if (config.protection.sqlInjection) {
     let sqlScore = 0;
     // Check query params
     for (const key in req.query) {
-      sqlScore = Math.max(sqlScore, checkSqlInjection(req.query[key]));
+      sqlScore = Math.max(sqlScore, decodeAndInspect(req.query[key], checkSqlInjection));
     }
-    // Check body params
+    // Check body params (recursive)
     if (req.body && typeof req.body === 'object') {
-      for (const key in req.body) {
-        if (typeof req.body[key] === 'string') {
-          sqlScore = Math.max(sqlScore, checkSqlInjection(req.body[key]));
-        }
-      }
+      sqlScore = Math.max(sqlScore, deepScanObject(req.body, checkSqlInjection));
     }
     if (sqlScore > 0) {
       score += sqlScore;
@@ -281,15 +384,11 @@ function calculateThreatScore(req, config) {
     let xssScore = 0;
     // Check query params
     for (const key in req.query) {
-      xssScore = Math.max(xssScore, checkXss(req.query[key]));
+      xssScore = Math.max(xssScore, decodeAndInspect(req.query[key], checkXss));
     }
-    // Check body params
+    // Check body params (recursive)
     if (req.body && typeof req.body === 'object') {
-      for (const key in req.body) {
-        if (typeof req.body[key] === 'string') {
-          xssScore = Math.max(xssScore, checkXss(req.body[key]));
-        }
-      }
+      xssScore = Math.max(xssScore, deepScanObject(req.body, checkXss));
     }
     if (xssScore > 0) {
       score += xssScore;
@@ -298,12 +397,11 @@ function calculateThreatScore(req, config) {
   }
 
   // 8. User-Agent abnormalities / Bot detection
-  const ua = req.headers['user-agent'] || '';
   const suspiciousUas = [/curl/i, /wget/i, /python/i, /postman/i, /nikto/i, /sqlmap/i, /nmap/i];
   for (const sUa of suspiciousUas) {
-    if (sUa.test(ua)) {
+    if (sUa.test(uaString)) {
       score += 25;
-      reasons.push(`Suspicious User-Agent detected: ${ua}`);
+      reasons.push(`Suspicious User-Agent detected: ${uaString}`);
       break;
     }
   }

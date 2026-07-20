@@ -18,6 +18,7 @@ const { stealthModeMiddleware } = require('../middleware/stealthMode');
 const graphqlGuard = require('../middleware/graphqlGuard');
 const schemaGuard = require('../middleware/schemaGuard');
 const challengeMiddleware = require('../middleware/challenge');
+const { behavioralTrackerMiddleware } = require('../middleware/behavioralTracker');
 
 // Memory store to keep last 50 threat logs for Dashboard viewer
 const dashboardLogs = [];
@@ -38,6 +39,8 @@ class WebShield {
     if (this.config.schemaValidation) Object.freeze(this.config.schemaValidation);
     if (this.config.challenge) Object.freeze(this.config.challenge);
     if (this.config.forensics) Object.freeze(this.config.forensics);
+    if (this.config.websocketGuard) Object.freeze(this.config.websocketGuard);
+    if (this.config.ddosSmartMode) Object.freeze(this.config.ddosSmartMode);
 
     // Initialize Logger
     initializeLogger(this.config);
@@ -179,6 +182,17 @@ class WebShield {
         return res.status(200).send(getFingerprintScript());
       }
 
+      // Handle Verification Challenge submission
+      if (req.path === '/webshield/challenge-verify' && req.method === 'POST') {
+        const { verifyChallenge } = require('../middleware/challenge');
+        return verifyChallenge(req, res, this.config.challenge);
+      }
+
+      // If the request has passed the challenge, bypass WAF checks
+      if (req.headers.cookie && req.headers.cookie.includes('webshield-verified=true')) {
+        return next();
+      }
+
       // Resolve Tenant Config dynamics
       const { tenantResolverMiddleware } = require('../middleware/tenantResolver');
       const resolveTenant = tenantResolverMiddleware(this.config);
@@ -234,6 +248,10 @@ class WebShield {
         const clientIp = req.ip || req.connection.remoteAddress || '127.0.0.1';
         recordAttackPath(clientIp, req.path || req.url);
         predictNextTarget(clientIp);
+
+        // Run Behavioral pattern tracking (spike + navigation)
+        const tracker = behavioralTrackerMiddleware(req.webShieldConfig.behavioralTracker);
+        tracker(req, res, () => {});
 
         // 3.2. Consciousness click trajectory telemetries check
         const runConsciousness = consciousnessMiddleware(req.webShieldConfig);
@@ -328,6 +346,11 @@ class WebShield {
         const threat = calculateThreatScore(req, req.webShieldConfig);
         req.webShieldThreat = threat;
 
+        // Run DDoS Smart Mode throttle delay
+        const { ddosSmartModeMiddleware } = require('../middleware/ddosSmartMode');
+        const runDdosSmart = ddosSmartModeMiddleware(req.webShieldConfig.ddosSmartMode);
+        await new Promise(resolve => runDdosSmart(req, res, resolve));
+
         // Print debug WAF telemetries to stdout
         if (req.webShieldConfig.debug) {
           console.log(`\x1b[33m[WebShield Debug]\x1b[0m ${req.method} ${req.path || req.url} | IP: ${clientIp} | Score: ${threat.score} (${threat.riskLevel}) | Blocks: ${threat.reasons.join('; ') || 'None'}`);
@@ -399,6 +422,10 @@ class WebShield {
 
           if (req.webShieldConfig.mode === 'strict' && req.webShieldConfig.autoResponse.block) {
             req.webShieldState.blocked = true;
+
+            // Trigger self-healing rule adaptation
+            const selfHealing = require('../services/selfHealing');
+            selfHealing.analyzeAndHeal(req, threat.score, threat.reasons, this);
 
             // Trigger dynamic rule mutations inside sandbox
             const { analyzeAndMutate } = require('../services/sandboxEngine');

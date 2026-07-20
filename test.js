@@ -413,6 +413,147 @@ function runZeroConfigTests() {
   console.log('✅ Passed: Smart Auto Mode dev/prod environment defaults');
 }
 
+/**
+ * Run Advanced WebShield Security features checks
+ */
+function runAdvancedFeaturesTests() {
+  console.log('🧪 Running Advanced WebShield Security features checks...');
+
+  const WebShield = require('./src/core/engine');
+  const engine = new WebShield({ mode: 'strict' });
+  const { calculateThreatScore } = require('./src/core/threatScore');
+
+  // 1. Deep Request Inspection - Nested JSON
+  const nestedReq = {
+    method: 'POST',
+    path: '/api/test',
+    headers: { 'user-agent': 'Mozilla/5.0' },
+    body: { data: { nested: { payload: '<script>alert(1)</script>' } } },
+    webShieldState: { blocked: false }
+  };
+  const nestedThreat = calculateThreatScore(nestedReq, engine.config);
+  assert.ok(nestedThreat.score > 30, 'Should detect XSS in nested JSON body');
+  console.log('✅ Passed: Deep request inspection (Nested JSON)');
+
+  // 2. Deep Request Inspection - Base64 Payload
+  const base64Req = {
+    method: 'POST',
+    path: '/api/test',
+    headers: { 'user-agent': 'Mozilla/5.0' },
+    body: { data: 'PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==' }, // <script>alert(1)</script>
+    webShieldState: { blocked: false }
+  };
+  const base64Threat = calculateThreatScore(base64Req, engine.config);
+  assert.ok(base64Threat.score > 30, 'Should detect Base64 encoded XSS payload');
+  console.log('✅ Passed: Deep request inspection (Base64 decoded)');
+
+  // 3. Behavioral Tracking - Spike Detection
+  const { behavioralTrackerMiddleware, trackingStore } = require('./src/middleware/behavioralTracker');
+  const tracker = behavioralTrackerMiddleware({ spikeThreshold: 2 });
+  const spikeReq = {
+    ip: '192.168.1.99',
+    path: '/test',
+    headers: {},
+    webShieldState: {}
+  };
+  // Simulate 3 requests in under 5 seconds
+  tracker(spikeReq, {}, () => {});
+  tracker(spikeReq, {}, () => {});
+  tracker(spikeReq, {}, () => {});
+  assert.strictEqual(spikeReq.webShieldState.requestSpikeDetected, true, 'Should detect request spike');
+  console.log('✅ Passed: Behavioral tracking (Spike detection)');
+
+  // 4. API Abuse - Token Sharing
+  const sharedReq1 = { ip: '10.0.0.1', path: '/api', headers: { 'x-api-key': 'secret-token', 'x-client-ip': '10.0.0.1' }, webShieldState: {} };
+  const sharedReq2 = { ip: '10.0.0.2', path: '/api', headers: { 'x-api-key': 'secret-token', 'x-client-ip': '10.0.0.2' }, webShieldState: {} };
+  const sharedReq3 = { ip: '10.0.0.3', path: '/api', headers: { 'x-api-key': 'secret-token', 'x-client-ip': '10.0.0.3' }, webShieldState: {} };
+  const sharedReq4 = { ip: '10.0.0.4', path: '/api', headers: { 'x-api-key': 'secret-token', 'x-client-ip': '10.0.0.4' }, webShieldState: {} };
+  calculateThreatScore(sharedReq1, engine.config);
+  calculateThreatScore(sharedReq2, engine.config);
+  calculateThreatScore(sharedReq3, engine.config);
+  const sharedThreat4 = calculateThreatScore(sharedReq4, engine.config);
+  assert.ok(sharedThreat4.score >= 50, 'Should flag token sharing abuse');
+  console.log('✅ Passed: API Abuse protection (Token sharing)');
+
+  // 5. Self-Healing WAF Rules
+  const healingReq = {
+    method: 'POST',
+    path: '/api/test',
+    headers: { 'user-agent': 'Mozilla/5.0' },
+    body: { data: 'select * from users; -- malicious-healing-payload-test' },
+    webShieldState: { blocked: false }
+  };
+  const threatScoreRes = calculateThreatScore(healingReq, engine.config);
+  
+  const selfHealing = require('./src/services/selfHealing');
+  const initialRulesCount = engine.activeRules.length;
+  selfHealing.analyzeAndHeal(healingReq, 100, ['SQL Injection patterns detected'], engine);
+  
+  assert.ok(engine.activeRules.length > initialRulesCount, 'Should dynamically generate new WAF rule');
+  assert.ok(engine.activeRules[engine.activeRules.length - 1].includes('malicious-healing-payload-test'), 'Should block custom offending payload');
+  console.log('✅ Passed: Self-Healing security rule adaptation');
+
+  // 6. DDoS Smart Mode Dynamic Latency Throttle
+  const { ddosSmartModeMiddleware } = require('./src/middleware/ddosSmartMode');
+  const ddosReq = {
+    ip: '127.0.0.1',
+    webShieldThreat: { score: 65 }, // Medium threat score
+    webShieldState: {}
+  };
+  const start = Date.now();
+  const runDdosSmart = ddosSmartModeMiddleware({ enabled: true });
+  runDdosSmart(ddosReq, {}, () => {
+    const elapsed = Date.now() - start;
+    const expectedDelay = (65 - 50) * 80; // 1200ms
+    assert.ok(elapsed >= expectedDelay - 100, 'DDoS Smart Mode should introduce dynamic delay');
+    assert.strictEqual(ddosReq.webShieldState.throttledMs, expectedDelay, 'Should track throttle duration');
+    console.log('✅ Passed: DDoS Smart Mode dynamic tar-pit throttling');
+  });
+
+  // 7. WebSocket Flood Guard
+  const { websocketGuard, wsRateStore } = require('./src/middleware/websocketGuard');
+  const { staticBlacklist } = require('./src/middleware/ipBlocker');
+  
+  const mockIo = {
+    connectionCb: null,
+    on(event, cb) {
+      if (event === 'connection') this.connectionCb = cb;
+    }
+  };
+
+  const wsGuardInstance = websocketGuard({ windowMs: 1000, maxMessages: 5 });
+  wsGuardInstance.attach(mockIo);
+
+  let disconnected = false;
+  const mockSocket = {
+    id: 'socket-test-123',
+    handshake: { address: '198.51.100.99' },
+    conn: { remoteAddress: '198.51.100.99' },
+    middlewareHook: null,
+    use(cb) {
+      this.middlewareHook = cb;
+    },
+    disconnect(val) {
+      if (val) disconnected = true;
+    },
+    on(event, cb) {}
+  };
+
+  // Trigger client connection
+  mockIo.connectionCb(mockSocket);
+
+  // Send 6 messages rapidly (limit is 5)
+  for (let i = 0; i < 6; i++) {
+    if (mockSocket.middlewareHook) {
+      mockSocket.middlewareHook(['message', 'hello'], (err) => {});
+    }
+  }
+
+  assert.strictEqual(disconnected, true, 'Should disconnect socket on message flood');
+  assert.ok(staticBlacklist.includes('198.51.100.99'), 'Should add flooding IP to firewall blocklist');
+  console.log('✅ Passed: WebSocket Guard connection flood blocker');
+}
+
 // Orchestrate runs
 try {
   runThreatScoreTests();
@@ -425,6 +566,7 @@ try {
   runVaultAndTenantTests();
   runNextGenSecurityTests();
   runZeroConfigTests();
+  runAdvancedFeaturesTests();
   console.log('\n🎉 ALL WEBSHIELD SDK TESTS PASSED SUCCESSFULLY!');
   process.exit(0);
 } catch (testError) {

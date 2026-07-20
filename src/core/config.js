@@ -98,6 +98,24 @@ const defaultConfig = {
     blockThreshold: 75    // completely block request if threatScore >= 75
   },
 
+  // Behavioral anomaly tracking configuration
+  behavioralTracker: {
+    windowMs: 5000,
+    spikeThreshold: 30
+  },
+
+  // WebSocket Flood protection settings
+  websocketGuard: {
+    enabled: true,
+    windowMs: 1000,
+    maxMessages: 50
+  },
+
+  // DDoS Smart Mode dynamic tar-pit settings
+  ddosSmartMode: {
+    enabled: true
+  },
+
   honeypot: {
     enabled: true,
     paths: ['/admin', '/.env', '/wp-admin', '/config', '/setup.php', '/actuator/health', '/__trap'],
