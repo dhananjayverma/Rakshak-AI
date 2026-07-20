@@ -59,7 +59,6 @@ function runThreatScoreTests() {
   assert.ok(xssResult.score >= 40);
   console.log('✅ Passed: XSS payload detection check');
 
-  // Test Case 3: SQL Injection union pattern check
   const sqliReq = {
     path: '/',
     headers: { 'user-agent': 'Mozilla/5.0' },
@@ -98,10 +97,9 @@ function runCorsTests() {
     end: () => {}
   };
 
-  // Test Case 1: Server-to-server request (no origin) should be allowed
   runCors({ headers: {} }, mockRes, (err) => {
     assert.strictEqual(err, undefined);
-    console.log('✅ Passed: CORS Server-to-server allowed');
+    console.log('✅ Passed: CORS Server-to-server request without origin allowed');
   });
 
   // Test Case 2: Whitelisted origin string match should be allowed
